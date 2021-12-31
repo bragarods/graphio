@@ -1,0 +1,84 @@
+# Copyright 2019 JanusGraph Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: '3'
+
+services:
+
+  cassandra:
+    image: cassandra:4
+    container_name: janusgraph_cassandra
+    mem_limit: 2g
+    expose:
+      - 7000
+      - 7001
+      - 7199
+      - 9042
+      - 9160
+      - 9404
+    ports:
+      - 9042:9042
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(nodetool statusgossip) = running ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    networks:
+        - janusgraph-network
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+
+  janusgraph:
+      image: janusgraph/janusgraph:0.6
+      container_name: janusgraph
+      ports:
+        - 8182:8182
+      volumes:
+        - "./janus_custom:/etc/opt/janusgraph/:ro"
+        - "./janus_init:/docker-entrypoint-initdb.d"
+      depends_on:
+        - cassandra
+      networks:
+        - janusgraph-network
+
+  invana-engine:
+    image: invanalabs/invana-engine
+    container_name: invana_engine
+    depends_on:
+        - janusgraph
+    restart: always
+    ports:
+      - 8200:8200
+    environment:
+      - GREMLIN_SERVER_URL=ws://janusgraph:8182/gremlin
+      - GREMLIN_TRAVERSAL_SOURCE=cnxinit
+    networks:
+      - janusgraph-network
+
+  invana-studio:
+    image: invanalabs/invana-studio
+    container_name: invana_studio
+    depends_on:
+        - janusgraph
+    ports:
+      - 8300:8300
+    networks:
+      - janusgraph-network
+
+networks:
+  janusgraph-network:
+volumes:
+  cassandra_data:
